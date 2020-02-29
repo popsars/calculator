@@ -84,6 +84,11 @@ class RangeSetting(QDialog):
         values = Setting.load_range(self.username, self.operation.name)
         for value, spb in zip(values, self.spbs):
             spb.setValue(value)
+        if self.operation in [OperationType.MULTIPLICATION, OperationType.DIVISION]:
+            self.x1_spb.setMinimum(max(2, self.x1_spb.value()))
+            self.x2_spb.setMinimum(max(self.x1_spb.value(), self.x2_spb.value()))
+            self.y1_spb.setMinimum(max(2, self.y1_spb.value()))
+            self.y2_spb.setMinimum(max(self.y1_spb.value(), self.y2_spb.value()))
         self.set_layout()
 
     def set_layout(self):
@@ -292,13 +297,14 @@ class Calculator(QDialog):
     def update_range(self, *args):
         values = Setting.load_range(self.username, self.operation.name)
         self.config_btn.setText(str(values))
+        if all(map(lambda x: x == 0, values)):
+            self.on_config()
 
     def on_config(self, *args):
         RangeSetting(parent=self).exec()
         self.update_range()
 
     def on_started(self, *args):
-        # self.hide()
         seconds = int(self.seconds_cmb.currentText())
         playground = PlayGround(parent=self, seconds=seconds)
         playground.exec()
