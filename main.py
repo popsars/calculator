@@ -7,7 +7,7 @@ import time
 import ujson
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
-from typing import List, Union
+from typing import List
 from loguru import logger
 
 
@@ -27,7 +27,7 @@ class Setting:
         values = redisc.hget(f'{username}/range', key)
         if values:
             return ujson.loads(values)
-        return [0, 0, 0, 0]
+        return [0, 0, 0, 0, 0, 0]
 
     @classmethod
     def save_range(cls, username, key: str, values: List[int]) -> None:
@@ -76,19 +76,22 @@ class RangeSetting(QDialog):
         self.x2_spb = QSpinBox()
         self.y1_spb = QSpinBox()
         self.y2_spb = QSpinBox()
-        self.spbs = [self.x1_spb, self.x2_spb, self.y1_spb, self.y2_spb]
+        self.answer1_spb = QSpinBox()
+        self.answer2_spb = QSpinBox()
+        self.spbs = [self.x1_spb, self.x2_spb, self.y1_spb, self.y2_spb, self.answer1_spb, self.answer2_spb]
         for spb in self.spbs:
             spb.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             spb.setRange(0, 1000)
-            spb.valueChanged.connect(self.save)
-        values = Setting.load_range(self.username, self.operation.name)
-        for value, spb in zip(values, self.spbs):
-            spb.setValue(value)
         if self.operation in [OperationType.MULTIPLICATION, OperationType.DIVISION]:
             self.x1_spb.setMinimum(max(2, self.x1_spb.value()))
             self.x2_spb.setMinimum(max(self.x1_spb.value(), self.x2_spb.value()))
             self.y1_spb.setMinimum(max(2, self.y1_spb.value()))
             self.y2_spb.setMinimum(max(self.y1_spb.value(), self.y2_spb.value()))
+        values = Setting.load_range(self.username, self.operation.name)
+        for value, spb in zip(values, self.spbs):
+            spb.setValue(value)
+        for spb in self.spbs:
+            spb.valueChanged.connect(self.save)
         self.set_layout()
 
     def set_layout(self):
@@ -101,6 +104,10 @@ class RangeSetting(QDialog):
         grid.addWidget(self.y1_spb, 1, 1, 1, 1)
         grid.addWidget(QLabel('~'), 1, 2, 1, 1)
         grid.addWidget(self.y2_spb, 1, 3, 1, 1)
+        grid.addWidget(QLabel('Z:'), 2, 0, 1, 1)
+        grid.addWidget(self.answer1_spb, 2, 1, 1, 1)
+        grid.addWidget(QLabel('~'), 2, 2, 1, 1)
+        grid.addWidget(self.answer2_spb, 2, 3, 1, 1)
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel(self.operation.name))
@@ -110,9 +117,30 @@ class RangeSetting(QDialog):
 
     @logger.catch
     def save(self, *args):
-        xs = sorted([self.x1_spb.value(), self.x2_spb.value()])
-        ys = sorted([self.y1_spb.value(), self.y2_spb.value()])
-        Setting.save_range(username=self.username, key=self.operation.name, values=xs + ys)
+        xs = x1, x2 = sorted([self.x1_spb.value(), self.x2_spb.value()])
+        ys = y1, y2 = sorted([self.y1_spb.value(), self.y2_spb.value()])
+        answers = sorted([self.answer1_spb.value(), self.answer2_spb.value()])
+        # 检查结果范围
+        if self.operation == OperationType.ADDITION:
+            a1 = x1 + y1
+            a2 = x2 + y2
+        elif self.operation == OperationType.SUBTRACTION:
+            a1 = x1 - y2
+            a2 = x2 - y1
+            assert a2 >= 0
+        elif self.operation == OperationType.MULTIPLICATION:
+            a1 = x1 * y1
+            a2 = x2 * y2
+        elif self.operation == OperationType.DIVISION:
+            a1 = x1 // y2
+            a2 = x2 // y1
+            assert a2 >= 0
+        else:
+            return
+        answers = [max(max(0, a1), answers[0]), min(max(0, a2), answers[1])]
+        self.answer1_spb.setValue(answers[0])
+        self.answer2_spb.setValue(answers[1])
+        Setting.save_range(username=self.username, key=self.operation.name, values=xs + ys + answers)
 
 
 class ValueLineEdit(QLineEdit):
@@ -133,7 +161,7 @@ class PlayGround(QDialog):
         self.operation: OperationType = self.parent().operation
         self.username: str = self.parent().username
         values = Setting.load_range(self.username, self.operation.name)
-        self.x1, self.x2, self.y1, self.y2 = values
+        self.x1, self.x2, self.y1, self.y2, self.a1, self.a2 = values
         self.seconds: int = seconds
         self.setWindowTitle(f'{self.seconds} Seconds Play')
 
@@ -198,17 +226,18 @@ class PlayGround(QDialog):
 
     @logger.catch
     def next(self):
-        x = random.randint(self.x1, self.x2)
-        y = random.randint(self.y1, self.y2)
-        values = [x, y]
-        if self.operation in [OperationType.SUBTRACTION, OperationType.DIVISION]:
-            if x < y:
-                values = [y, x]
-        self.value1_spb.setValue(values[0])
-        self.value2_spb.setValue(values[1])
-        self.answer_spb.clear()
-        self.answer_spb.start_at = time.time()
-        self.answer_spb.setFocus()
+        while True:
+            x = random.randint(self.x1, self.x2)
+            y = random.randint(self.y1, self.y2)
+            opc = self.operation.value[1]
+            ref = int(eval(f'{x}{opc}{y}'))
+            if self.a1 <= ref <= self.a2:
+                self.value1_spb.setValue(x)
+                self.value2_spb.setValue(y)
+                self.answer_spb.clear()
+                self.answer_spb.start_at = time.time()
+                self.answer_spb.setFocus()
+                break
 
     @logger.catch
     def check(self, *args):
@@ -296,7 +325,8 @@ class Calculator(QDialog):
 
     def update_range(self, *args):
         values = Setting.load_range(self.username, self.operation.name)
-        self.config_btn.setText(str(values))
+        x1, x2, y1, y2, a1, a2 = values
+        self.config_btn.setText(f'[{x1},{x2}] {self.operation.value[0]} [{y1},{y2}] = [{a1},{a2}]')
         if all(map(lambda x: x == 0, values)):
             self.on_config()
 
