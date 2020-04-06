@@ -190,8 +190,8 @@ class PlayGround(QDialog):
         self.tests: List[List] = []
         self.widgets = [self.value1_spb, self.operation_lbl, self.value2_spb, self.equal_lbl, self.answer_spb]
         for w in self.widgets:
-            w.setStyleSheet('border: none; background: transparent; font-size: 128px;')
-        self.answer_spb.setStyleSheet('font-size: 128px;')
+            w.setStyleSheet('border: none; background: transparent; font-size: 256px;')
+        self.answer_spb.setStyleSheet('font-size: 256px;')
         self.result_edt = QPlainTextEdit()
         self.result_edt.setReadOnly(True)
         self.result_edt.setVisible(False)
