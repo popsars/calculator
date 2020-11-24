@@ -153,14 +153,14 @@ def generate_html(filename: str):
         f.write(soup.prettify())
 
     from pdfkit.configuration import Configuration
-    configuration = Configuration(wkhtmltopdf='C:/Program Files (x86)/wkhtmltopdf/bin/wkhtmltopdf.exe')
+    configuration = Configuration(wkhtmltopdf='./wkhtmltopdf.exe')
     pdf = pdfkit.PDFKit(soup.prettify(), type_='string', configuration=configuration)
-    print(pdf.to_pdf('out.pdf'))
+    pdf.to_pdf('out.pdf')
     # pdfkit.from_string(soup.prettify(), f'{os.path.splitext(filename)[0]}.pdf')
 
 
 if __name__ == '__main__':
-    # generate_csv()
+    generate_csv()
     generate_html('test_0_20_+-_3.0.csv')
     # generate_html('test_0_20_+-_4.0.csv')
     # generate_html('test_0_20_+-_4.1.csv')
