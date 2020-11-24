@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
 import enum
 import random
-import redis
+import shelve
 import statistics
 import time
-import ujson
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
-from typing import List
+from typing import Dict, List
 from loguru import logger
 
 
-redisc = redis.from_url(url='redis://127.0.0.1:6379', db=1, decode_responses=True)
+DB = 'database'
 
 
 class OperationType(enum.Enum):
@@ -22,16 +21,29 @@ class OperationType(enum.Enum):
 
 
 class Setting:
+
     @classmethod
     def load_range(cls, username, key: str) -> List[int]:
-        values = redisc.hget(f'{username}/range', key)
-        if values:
-            return ujson.loads(values)
-        return [0, 0, 0, 0, 0, 0]
+        result = [0, 0, 0, 0, 0, 0]
+        c: str = f'{username}/range'
+        try:
+            with shelve.open(DB) as db:
+                result = db[c][key]
+        except Exception as e:
+            logger.trace(e)
+        finally:
+            logger.debug(f'load_range: [{c}][{key}] = {result}')
+            return result
 
     @classmethod
     def save_range(cls, username, key: str, values: List[int]) -> None:
-        redisc.hset(f'{username}/range', key, ujson.dumps(values))
+        c: str = f'{username}/range'
+        with shelve.open(DB, writeback=True) as db:
+            if isinstance(db.get(c), dict):
+                db[c][key] = values
+            else:
+                db[c] = {}
+            logger.debug(f'save_range: [{c}][{key}] = {values}')
 
 
 class Configurator(QDialog):
@@ -271,11 +283,14 @@ class PlayGround(QDialog):
         self.progress.setVisible(False)
         self.result_edt.setVisible(True)
 
-        pipe = redisc.pipeline(transaction=True)
-        for test in self.tests:
-            pipe.rpush(f'{self.username}/tests', ujson.dumps(test))
-        pipe.execute()
-        print(f'{self.username}/tests', redisc.llen(f'{self.username}/tests'))
+        with shelve.open(DB, writeback=True) as db:
+            c: str = f'{self.username}/tests'
+            if c not in db:
+                db[c] = []
+            for test in self.tests:
+                db[c].append(test)
+            logger.debug(f'save_score: [{c}] {test}')
+            logger.debug(f'score_length: [{c}] {len(db[c])}')
 
         incorrect = [test for test in self.tests if test[6] is False]
         correct = [test for test in self.tests if test[6] is True]
